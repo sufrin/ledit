@@ -67,6 +67,7 @@ module A :
         value empty : t;
         value of_char : Char.t -> t;
         value of_ascii : string -> t;
+        value of_char_list : list (Char.t) -> t;
         value length : t -> int;
         value set : t -> int -> Char.t -> unit;
         value get : t -> int -> Char.t;
@@ -74,6 +75,7 @@ module A :
         value concat : t -> t -> t;
         value input_line : in_channel -> t;
         value output : out_channel -> t -> unit;
+        value is_suffix_of: int -> t -> int -> t -> bool;
       end;
   end =
   struct
@@ -198,7 +200,7 @@ module A :
           output_char stderr '\b';
         };
       end;
-    module String =
+    module String = (***)
       struct
         type t = array string;
         value empty = [| |];
@@ -209,6 +211,15 @@ module A :
                if char_code s.[i] < 128 then String.make 1 s.[i]
                else invalid_arg "A.String.of_ascii")
         ;
+        value of_char_list l =
+              let length = List.length l in
+              let res = Array.make length  "" in
+              let rec loop i l = 
+                  if i<0 then res else 
+                       let _ = Array.set res i (List.hd l) in loop (i-1) (List.tl l)
+                  in 
+              let _ = loop length l in res;   
+        
         value length = Array.length;
         value set = Array.set;
         value get = Array.get;
@@ -228,6 +239,10 @@ module A :
                   else loop [String.sub s i n :: list] (i + n) ]
         ;
         value output oc s = Array.iter (output_string oc) s;
+        value is_suffix_of ll l rl r = 
+              if ll>rl then False else
+              let rec m lx rx = if lx<0 then True else get l lx = get r rx && m (lx-1) (rx-1)
+              in  m (ll-1) (rl-1);
       end;
   end
 ;
@@ -262,6 +277,7 @@ type command =
   | End_of_history
   | End_of_line
   | Expand_abbrev
+  | Expand_visible_abbrev (* an abbreviation is visible to the left of the cursor; this key expands it *)
   | Forward_char
   | Forward_word
   | Insert of string
@@ -285,6 +301,11 @@ type command =
 ;
 
 type istate = [ Normal of string | Quote ];
+
+value debug_keyboard = ref False;
+
+value minimal_control_keys = ref False; 
+value set_minimal_control_keys () = minimal_control_keys.val := True;
 
 value meta_as_escape = ref True;
 value unset_meta_as_escape () = meta_as_escape.val := False;
@@ -413,53 +434,31 @@ value insert_command s comm kb =
   insert_in_tree 0 kb
 ;
 
-value init_default_commands kb =
-  List.fold_left (fun kb (key, bind) -> insert_command key bind kb) kb
-    [("\\C-a", Beginning_of_line);
-     ("\\C-e", End_of_line);
-     ("\\C-f", Forward_char);
-     ("\\C-b", Backward_char);
-     ("\\C-p", Previous_history);
-     ("\\C-n", Next_history);
-     ("\\C-r", Reverse_search_history);
-     ("\\C-d", Delete_char_or_end_of_file);
-     ("\\C-h", Backward_delete_char);
-     ("\\177", Backward_delete_char);
-     ("\\C-i", Complete_file_name);
-     ("\\C-t", Transpose_chars);
-     ("\\C-q", Quoted_insert);
-     ("\\C-k", Kill_line);
-     ("\\C-y", Yank);
-     ("\\C-u", Unix_line_discard);
-     ("\\C-l", Redraw_current_line);
-     ("\\C-g", Abort);
-     ("\\C-c", Interrupt);
-     ("\\C-z", Suspend);
+value minimal_bindings = 
+[
+     ("\\C-u",  Unix_line_discard);
+     ("\\C-l",  Redraw_current_line);
+     ("\\C-g",  Abort);
+     ("\\C-c",  Interrupt);
+     ("\\C-z",  Suspend);
      ("\\C-\\", Quit);
-     ("\\n", Accept_line);
-     ("\\C-x", Operate_and_get_next);
-     ("\\ef", Forward_word);
-     ("\\eb", Backward_word);
-     ("\\ec", Capitalize_word);
-     ("\\eu", Upcase_word);
-     ("\\el", Downcase_word);
-     ("\\e<", Beginning_of_history);
-     ("\\e>", End_of_history);
-     ("\\ed", Kill_word);
-     ("\\e\\C-h", Backward_kill_word);
-     ("\\e\\177", Backward_kill_word);
-     ("\\e/", Expand_abbrev);
-     ("\\e[A", Previous_history);	(* Up arrow *)
-     ("\\e[B", Next_history);		(* Down arrow *)
-     ("\\e[C", Forward_char);		(* Left arrow *)
-     ("\\e[D", Backward_char);		(* Right arrow *)
-     ("\\e[3~", Delete_char);		(* Delete *)
-     ("\\e[H", Beginning_of_line);	(* Home *)
-     ("\\e[F", End_of_line);		(* End *)
-     ("\\e[5~", Previous_history);	(* Page Up *)
-     ("\\e[6~", Next_history);          (* Page Down *)
-     ("\\e[2H", Beginning_of_history);	(* Shift Home *)
-     ("\\e[2F", End_of_history);	(* Shift End *)
+     ("\\n",    Accept_line);
+     ("\\C-d",  Delete_char_or_end_of_file);
+     ("\\C-h",  Backward_delete_char);
+     ("\\177",    Backward_delete_char);
+     ("\\e[1;2H", Beginning_of_history); (* Shift Home *)
+     ("\\e[1;2F", End_of_history);       (* Shift End *)
+     ("\\e[A",  Previous_history);       (* Up arrow *)
+     ("\\e[B",  Next_history);           (* Down arrow *)
+     ("\\e[C",  Forward_char);           (* Left arrow *)
+     ("\\e[D",  Backward_char);          (* Right arrow *)
+     ("\\e[3~", Delete_char);            (* Delete *)
+     ("\\e[H", Beginning_of_line);       (* Home *)
+     ("\\e[F", End_of_line);             (* End *)
+     ("\\e[5~", Previous_history);       (* Page Up *)
+     ("\\e[6~", Next_history);           (* Page Down *)
+     ("\\e[2H", Beginning_of_history);   (* Shift Home *)
+     ("\\e[2F", End_of_history);         (* Shift End *)
      ("\\e[OA", Previous_history);
      ("\\e[OC", Forward_char);
      ("\\e[OD", Backward_char);
@@ -469,21 +468,66 @@ value init_default_commands kb =
      ("\\eOF", End_of_line); (* End *)
      (* rxvt *)
      ("\\e[7~", Beginning_of_line); (* Home *)
-     ("\\e[8~", End_of_line) (* End *)
-     ::
-     if meta_as_escape.val then
-       [("\\M-b", Backward_word);
-        ("\\M-c", Capitalize_word);
-        ("\\M-d", Kill_word);
-        ("\\M-f", Forward_word);
-        ("\\M-l", Downcase_word);
-        ("\\M-u", Upcase_word);
-        ("\\M-<", Beginning_of_history);
-        ("\\M->", End_of_history);
-        ("\\M-/", Expand_abbrev);
-        ("\\M-\\C-h", Backward_kill_word);
-        ("\\M-\\127", Backward_kill_word)]
-     else []]
+     ("\\e[8~", End_of_line) (* End *)     
+]
+;
+
+value init_default_commands kb =
+  List.fold_left (fun kb (key, bind) -> insert_command key bind kb) kb 
+    (if minimal_control_keys.val then 
+        minimal_bindings
+    else
+        minimal_bindings @
+        [("\\C-a", Beginning_of_line);
+         ("\\C-e", End_of_line);
+         ("\\C-f", Forward_char);
+         ("\\C-b", Backward_char);
+         ("\\C-p", Previous_history);
+         ("\\C-n", Next_history);
+         ("\\C-r", Reverse_search_history);
+         ("\\C-d", Delete_char_or_end_of_file);
+         ("\\C-h", Backward_delete_char);
+         ("\\177", Backward_delete_char);
+         ("\\C-i", Complete_file_name);
+         ("\\C-t", Transpose_chars);
+         ("\\C-q", Quoted_insert);
+         ("\\C-k", Kill_line);
+         ("\\C-y", Yank);
+         ("\\C-u", Unix_line_discard);
+         ("\\C-l", Redraw_current_line);
+         ("\\C-g", Abort);
+         ("\\C-c", Interrupt);
+         ("\\C-z", Suspend);
+         ("\\C-\\", Quit);
+         ("\\n", Accept_line);
+         ("\\C-x", Operate_and_get_next);
+         ("\\ef", Forward_word);
+         ("\\eb", Backward_word);
+         ("\\ec", Capitalize_word);
+         ("\\eu", Upcase_word);
+         ("\\el", Downcase_word);
+         ("\\e<", Beginning_of_history);
+         ("\\e>", End_of_history);
+         ("\\ed", Kill_word);
+         ("\\e\\C-h", Backward_kill_word);
+         ("\\e\\177", Backward_kill_word);
+         ("\\e/", Expand_abbrev)    
+         ::
+         if meta_as_escape.val then
+           [("\\M-b", Backward_word);
+            ("\\M-c", Capitalize_word);
+            ("\\M-d", Kill_word);
+            ("\\M-f", Forward_word);
+            ("\\M-l", Downcase_word);
+            ("\\M-u", Upcase_word);
+            ("\\M-<", Beginning_of_history);
+            ("\\M->", End_of_history);
+            ("\\M-/", Expand_abbrev);
+            ("\\M-\\C-h", Backward_kill_word);
+            ("\\M-\\127", Backward_kill_word)]
+         else []
+         ]
+    )
 ;
 
 (* Reading the leditrc file *)
@@ -503,6 +547,37 @@ value rec parse_string rev_cl =
   | [: `c; r = parse_string [c :: rev_cl] :] -> r ]
 ;
 
+value rec parse_pat rev_cl =
+  fparser
+  [ [: `'/' :] -> rev_implode rev_cl
+  | [: `'\\'; `c; r = parse_string [c; '\\' :: rev_cl] :] -> r
+  | [: `c; r = parse_pat [c :: rev_cl] :] -> r ]
+;
+
+value parse_hex =
+      fparser
+      [: `( 'a'..'f' | 'A'..'F' | '0'..'9' as r) :] -> hex_value r
+;
+
+value parse_byte =
+      fparser
+      [: n1=parse_hex; n2=parse_hex :] -> (Char.chr(16*Option.get n1+Option.get n2))
+;
+
+(***)
+
+value rec parse_repl rev_cl =
+  fparser
+  [ [: `('/' | ' ' | '\t') :] -> rev_implode rev_cl
+  (*  This must await rationalization of A.String constructions 
+  | [: `'\\'; `'u'; lb=parse_byte; rb=parse_byte; r=parse_repl ([rb;lb]@rev_cl) :] -> r
+  *)
+  | [: `'\\'; `c; r = parse_repl [c :: rev_cl] :] -> r
+  | [: `c;        r = parse_repl [c :: rev_cl] :] -> r 
+  | [: :] -> rev_implode rev_cl
+  ]
+;
+
 value rec skip_to_eos =
   fparser
   [ [: `_; r = skip_to_eos :] -> r
@@ -513,29 +588,37 @@ value rec skip_spaces =
   fparser
   [ [: `(' ' | '\t'); r = skip_spaces :] -> r
   | [: `'#'; r = skip_to_eos :] -> r
-  | [: :] -> () ]
+  | [: :] -> ()
+  ]
 ;
 
 value rec parse_command rev_cl =
   fparser
-  [ [: `('a'..'z' | 'A'..'Z' | '-' as c); r = parse_command [c :: rev_cl] :] ->
-      r
+  [ [: `('a'..'z' | 'A'..'Z' | '-' as c); r = parse_command [c :: rev_cl] :] -> r      
   | [: :] -> rev_implode rev_cl ]
 ;
 
-type binding = [ B_string of string | B_comm of string ];
+type abbrev      = (A.String.t * string);
+
+type abbrevtable = list abbrev;
+
+type binding     = [ B_string of string | B_comm of string ];
+
+type spec        = [ B_binding of (string * binding) | B_abbrev of (string * string) ];
 
 value parse_binding =
   fparser
-  [ [: `'"'; s = parse_string [] :] -> B_string s
-  | [: c = parse_command [] :] -> B_comm c ]
+  [ [: `'"'; s = parse_string  [] :] -> B_string s
+  | [:       c = parse_command [] :] -> B_comm c ]
 ;
 
 value parse_line =
   fparser
-  [ [: `'"'; key = parse_string []; _ = skip_spaces; `':'; _ = skip_spaces;
-       binding = parse_binding; _ = skip_spaces; _ = Fstream.empty :] ->
-         (key, binding) ]
+  [ [: `'/'; pat = parse_pat []; _ = skip_spaces; repl = parse_repl []; _ = skip_spaces; _ = Fstream.empty :] -> B_abbrev(pat, repl)
+  | [: `'"'; key = parse_string []   ; _ = skip_spaces;  
+             `':'                    ; _ = skip_spaces;
+              binding = parse_binding; _ = skip_spaces; _ = Fstream.empty
+    :] -> B_binding(key, binding) ]
 ;
 
 value command_of_name = do {
@@ -556,6 +639,7 @@ value command_of_name = do {
   add "end-of-history" End_of_history;
   add "end-of-line" End_of_line;
   add "expand-abbrev" Expand_abbrev;
+  add "expand-visible-abbrev" Expand_visible_abbrev;
   add "complete-file-name" Complete_file_name;
   add "forward-char" Forward_char;
   add "forward-word" Forward_word;
@@ -582,28 +666,43 @@ value command_of_name = do {
 
 value init_file_commands kb fname =
   let ic = open_in fname in
-  loop kb where rec loop kb =
-    match try Some (input_line ic) with [ End_of_file -> None ] with
+  let ln = ref 0 in
+  loop kb []  where rec loop kb abbrevs =
+    let line = try Some (input_line ic) with [ End_of_file -> None ] in
+    let _ = incr ln in
+    match line with
     [ Some s ->
-        let kb =
+        let (kb, abbrevs) =
           match parse_line (Fstream.of_string s) with
-          [ Some ((key, B_string s), _) ->
+          [ Some (B_binding(key, B_string s), _) ->
+              let _ = if debug_keyboard.val then Format.eprintf "binding %s to string %s@." key s else () in
               let s =
                 loop [] 0 where rec loop rev_cl i =
                   match next_char s i with
                   [ Some (c, i) -> loop [c :: rev_cl] i
                   | None -> rev_implode rev_cl ]
               in
-              insert_command key (Insert s) kb
-          | Some ((key, B_comm comm_name), _) ->
+              (insert_command key (Insert s) kb, abbrevs)
+          | Some (B_binding(key, B_comm comm_name), _) ->
               match command_of_name comm_name with
-              [ Some comm -> insert_command key comm kb
-              | None -> kb ]
-          | None -> kb ]
+              [ Some comm -> let _ = if debug_keyboard.val then Format.eprintf "binding %s to command %s@." key comm_name else () in 
+                             (insert_command key comm kb, abbrevs)
+              | None      -> let _ = if debug_keyboard.val then Format.eprintf "binding %s to unknown command %s@." key comm_name else () in 
+                             (kb, abbrevs) ]
+          | Some(B_abbrev(p,r), _) ->  let _ = if debug_keyboard.val then Format.eprintf "visual %s abbreviates %s@." p r else () in
+                                       (try (kb, [(A.String.of_ascii p,r)]@abbrevs) with _ -> 
+                                        let _ = if debug_keyboard.val then Format.eprintf "visual abbreviation %s (should be in ascii)@." p  else () in
+                                        (kb, abbrevs))    (***)
+          | None -> let _ = if not  (s=="" || s.[0]=='#' || s.[0]==' ' || s.[0]=='\t') then Format.eprintf "Warning: malformed leditrc line %s:%d \"%s\"@." fname ln.val s else () in
+                    (kb, abbrevs) 
+          ]
         in
-        loop kb
-    | None -> do { close_in ic; kb } ]
+        loop kb abbrevs
+    | None -> do { close_in ic; (kb, abbrevs) } ]
 ;
+
+
+
 
 type line =
   { buf : mutable A.String.t;
@@ -635,7 +734,9 @@ type state =
     history : mutable Cursor.t A.String.t;
     abbrev : mutable option abbrev_data;
     complete_fn : mutable int;
-    complete_fn_screen : mutable int}
+    complete_fn_screen : mutable int;
+    abbrev_table : mutable abbrevtable
+  }
 ;
 
 value eval_comm s st =
@@ -678,15 +779,17 @@ value eval_comm s st =
               kb
             } ]
         in
-        let total_kb =
+        let (total_kb, abbrev_table) =
           match leditrc_mtime with
           [ Some mtime -> do {
               st.leditrc_mtime := mtime;
+              if debug_keyboard.val then Format.eprintf "Re-reading %s@." st.leditrc_name else ();
               init_file_commands init_kb st.leditrc_name
             }
-          | None -> init_kb ]
+          | None -> (init_kb, []) ]
         in
         st.total_kb := Some total_kb;
+        st.abbrev_table := abbrev_table;
         total_kb
       } ]
   in
@@ -1210,6 +1313,7 @@ value expand_abbrev st abbrev = do {
   update_output st
 };
 
+
 value start_with s s_ini =
   let len = String.length s_ini in
   String.length s >= len && String.sub s 0 len = s_ini
@@ -1222,6 +1326,41 @@ value insert_string st s = do {
         st.line.cur := st.line.cur + 1
       }) s
 };
+
+value insert_chars st s = do {
+      let strm = Stream.of_string s in
+      try
+        while True do {
+          insert_char st (A.Char.parse strm);
+          st.line.cur := st.line.cur + 1;
+        }
+      with
+      [ Stream.Failure -> () ];
+      update_output st
+};
+
+(***)
+      
+
+
+value expand_visible_abbrev st  = do {
+  let suffixes str = 
+      A.String.is_suffix_of (A.String.length str) (str) st.line.cur st.line.buf  
+  in 
+  let rec substitutions = fun
+  [ [(pat, repl) :: ss] ->
+     if suffixes pat then 
+        let _ = for i=1 to A.String.length pat do 
+        {   st.line.cur := st.line.cur - 1;
+            delete_char st 
+        } in 
+        let _ = update_output st in insert_chars st repl            
+     else substitutions ss
+  |  _ -> ()
+  ]
+  in  substitutions st.abbrev_table;
+};
+
 
 value is_directory fn =
   try Sys.is_directory fn with [ Sys_error _ -> False ]
@@ -1489,6 +1628,7 @@ value rec update_line st comm c = do {
       update_output st
     }
   | Expand_abbrev -> expand_abbrev st abbrev
+  | Expand_visible_abbrev -> expand_visible_abbrev st 
   | Complete_file_name -> complete_file_name st
   | Redraw_current_line -> do {
       put_newline st;
@@ -1586,7 +1726,8 @@ local st =
    last_line = A.String.empty; istate = Normal ""; shift = 0;
    init_kb = None; total_kb = None; cut = A.String.empty;
    last_comm = Accept_line; histfile = None; history = Cursor.create ();
-   abbrev = None; complete_fn = 0; complete_fn_screen = 0}
+   abbrev = None; complete_fn = 0; complete_fn_screen = 0;
+   abbrev_table = []}
 in
 value edit_line () = do {
   let rec edit_loop () = do {
@@ -1713,3 +1854,4 @@ value (set_prompt, get_prompt, input_a_char) =
 ;
 
 value input_char ic = A.Char.to_string (input_a_char ic);
+

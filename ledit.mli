@@ -21,7 +21,10 @@ value set_max_len : int -> unit;
 value set_son_pid : int -> unit;
 
 value unset_meta_as_escape : unit -> unit;
+value set_minimal_control_keys : unit -> unit;
 value set_utf8 : unit -> unit;
 value set_ascii : unit -> unit;
 
 value trace_sequences : ref bool;
+value debug_keyboard  : ref bool;
+
