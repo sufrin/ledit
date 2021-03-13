@@ -48,11 +48,11 @@ with a backslash followed by their code.
 .TP
 .B -u
 Unicode encoding: the terminal must have been set in unicode mode. See
-commands \fBunicode_start\fP and \fBunicode_stop\fP.
+commands \fBunicode_start\fP and \fBunicode_stop\fP. 
 .TP
 .B -m
 Install only a \fBminimal\fP set of default keys (the navigation-arrow 
-and deletion keys), leaving the user free to use the other keycodes
+and deletion keys), leaving the user free to define the other keycodes
 in an LEDITRC file.
 .TP
 .B -dk
@@ -85,33 +85,33 @@ this case, use the manipulation with "escape").
 The default editing commands are:
 
 .nf
-      ^a   : beginning of line
-      ^e   : end of line
-      ^f   : forward char
-      ^b   : backward char
-      M-f  : forward word
-      M-b  : backard word
-      TAB  : complete file name
-      ^p   : previous line in history
-      ^n   : next line in history
-      M-<  : first line in history
-      M->  : last line in history
-      ^r   : reverse search in history (see below)
-      ^d   : delete char (or EOF if the line is empty)
+      ^a   : beginning of line  (*)
+      ^e   : end of line        (*)
+      ^f   : forward char       (*)
+      ^b   : backward char      (*)
+      M-f  : forward word       (*)
+      M-b  : backward word      (*)
+      TAB  : complete file name 
+      ^p   : previous line in history   (*)
+      ^n   : next line in history       (*)
+      M-<  : first line in history      (*)
+      M->  : last line in history       (*)
+      ^r   : reverse search in history (see below)      (*)
+      ^d   : delete char (or EOF if the line is empty)  (*)
       ^h   : (or backspace) backward delete char
-      ^t   : transpose chars
-      M-c  : capitalize word
-      M-u  : upcase word
-      M-l  : downcase word
-      M-d  : kill word
-      M-^h : (or M-del or M-backspace) backward kill word
-      ^q   : insert next char
-      M-/  : expand abbreviation
-      ^k   : cut until end of line
-      ^y   : paste
+      ^t   : transpose chars    (*)
+      M-c  : capitalize word    (*)
+      M-u  : upcase word        (*)
+      M-l  : downcase word      (*)
+      M-d  : kill word          (*)
+      M-^h : (or M-del or M-backspace) backward kill word       (*)
+      ^q   : insert next char           (*)
+      M-/  : expand abbreviation        (*)
+      ^k   : cut until end of line      (*)
+      ^y   : paste                      (*)
       ^u   : line discard
       ^l   : redraw current line
-      ^g   : abort prefix
+      ^g   : abort prefix               (*)
       ^c   : interrupt
       ^z   : suspend
       ^\\   : quit
@@ -120,7 +120,9 @@ The default editing commands are:
       other  : insert char
 .fi
 
-The arrow keys can be used, providing your keyword returns standard key
+Those marked with an asterisk are omitted when only the minimal set is installed (the -m option). 
+
+The arrow keys can be used, providing your keyboard returns standard key
 sequences:
 
 .nf
@@ -143,7 +145,7 @@ Other keys:
 .fi
 
 .SH REVERSE SEARCH
-The reverse search in incremental, i.e. \fIledit\fP backward searchs in the
+The reverse search is incremental, i.e. \fIledit\fP backward searchs in the
 history a line holding the characters typed. If you type "a", its search the
 first line before the current line holding an "a" and displays it. If you then
 type a "b", its search a line holding "ab", and so on. If you type ^h (or
@@ -167,7 +169,7 @@ Summary of reverse search commands:
 If the environment variable LEDITRC is set, it contains the name of the
 leditrc file. Otherwise it is the file named ".leditrc" in user's home
 directory. When starting, ledit reads this file, if it exists, to modify
-or complete the default bindings and visible abbreviations. If this file is changed while reading
+or complete the default bindings and \fIVISIBLE ABBREVIATION\fPs. If this file is changed while reading
 lines, it is read again to take the new file into account.
 
 Bindings lines are the ones which start with a string defining the key
@@ -238,7 +240,7 @@ The commands are:
   yank: insert kill buffer
 .fi
 
-.SH VISUAL ABBREVIATIONS
+.SH VISIBLE ABBREVIATIONS
 Abbreviation definitions appear in the LEDITRC file and are of the form:
 
 .nf
@@ -247,7 +249,7 @@ Abbreviation definitions appear in the LEDITRC file and are of the form:
 
 Where the pattern, /\fIpat\fP/, \fBmust\fP consist of ascii characters. Its
 replacement, \fIrep\fP, may consist of any (non-space) characters at all, including
-characters in the utf-8, or iso-8859 encoding. Both pattern and replacement
+characters in the utf-8, (which includes iso-latin-1) encoding. Both pattern and replacement
 are interpreted literally (ie no escape characters), except that \/ and \\ 
 mean / and \ respectively.  As a concession to readability, any space
 before the first visible character of the \fIrep\fP is ignored, and the
@@ -255,11 +257,9 @@ rightmost "/" following it may be missing.
 
 When the "expand-visible-abbrev" command is invoked, by pressing a
 key(-sequence) bound to it,  the list of visual abbreviations
-is searched for the first occurence of a \fIpat\fP that matches the text
+is searched for the longest occurence of a \fIpat\fP that matches the text
 directly to the left of the cursor. If one is found, then it is replaced by
-its corresponding \fIrep\fB. NB: AT present a pattern that is a suffix of another pattern
-should appear earlier in the LEDITRC file.
-
+its corresponding \fIrep\fB. 
 
 .SH KNOWN BUGS
 If \fIledit\fP has been launched in a shell script, the suspend command kills
@@ -268,7 +268,7 @@ it and its command... Use "exec ledit comm" instead of "ledit comm".
 The suspend command stops \fIledit\fP but not the called program. Do not
 do this if the called program is not waiting on standard input.
 .br
-In some systems (e.g. alpha), pasting two many characters works bad and
+In some systems (e.g. alpha), pasting too many characters works bad and
 may block the terminal. Probably a kernel problem. No solution.
 
 .SH SEE ALSO
@@ -279,4 +279,5 @@ unicode_start(1), unicode_stop(1).
 Daniel de Rauglaudre, at INRIA, france.
 .br
 daniel.de_rauglaudre@inria.fr
+
 

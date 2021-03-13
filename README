@@ -13,3 +13,7 @@ National de Recherche en Informatique et Automatique (Inria).
   BUG REPORTS AND USER FEEDBACK:
 
 Please report bugs via Github's issues at: https://github.com/chetmurthy/ledit
+
+Note added by Bernard Sufrin, Oxford, March 2021: I added a new
+form of abbreviation, "visible abbreviation" (see the man page for
+details).

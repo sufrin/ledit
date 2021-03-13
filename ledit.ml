@@ -277,7 +277,7 @@ type command =
   | End_of_history
   | End_of_line
   | Expand_abbrev
-  | Expand_visible_abbrev (* an abbreviation is visible to the left of the cursor; this key expands it *)
+  | Expand_visible_abbrev (* new in 0.5a *)
   | Forward_char
   | Forward_word
   | Insert of string
@@ -441,6 +441,7 @@ value minimal_bindings =
      ("\\C-g",  Abort);
      ("\\C-c",  Interrupt);
      ("\\C-z",  Suspend);
+     ("\\C-i", Complete_file_name);
      ("\\C-\\", Quit);
      ("\\n",    Accept_line);
      ("\\C-d",  Delete_char_or_end_of_file);
@@ -488,7 +489,6 @@ value init_default_commands kb =
          ("\\C-d", Delete_char_or_end_of_file);
          ("\\C-h", Backward_delete_char);
          ("\\177", Backward_delete_char);
-         ("\\C-i", Complete_file_name);
          ("\\C-t", Transpose_chars);
          ("\\C-q", Quoted_insert);
          ("\\C-k", Kill_line);
@@ -693,12 +693,15 @@ value init_file_commands kb fname =
                                        (try (kb, [(A.String.of_ascii p,r)]@abbrevs) with _ -> 
                                         let _ = if debug_keyboard.val then Format.eprintf "visual abbreviation %s (should be in ascii)@." p  else () in
                                         (kb, abbrevs))    (***)
-          | None -> let _ = if not  (s=="" || s.[0]=='#' || s.[0]==' ' || s.[0]=='\t') then Format.eprintf "Warning: malformed leditrc line %s:%d \"%s\"@." fname ln.val s else () in
+          | None -> let _ = if (String.length s==0 || s.[0]=='#' || s.[0]==' ' || s.[0]=='\t') then 
+                               () 
+                            else  Format.eprintf "Warning: malformed nonempty leditrc line %s:%d \"%s\"@." fname ln.val s
+                    in
                     (kb, abbrevs) 
           ]
         in
         loop kb abbrevs
-    | None -> do { close_in ic; (kb, abbrevs) } ]
+    | None -> do { close_in ic; (kb, List.sort (fun (l,_) (r,_) -> A.String.length r - A.String.length l) abbrevs) } ]
 ;
 
 
@@ -1409,11 +1412,15 @@ value complete_file_name st = do {
         match A.Char.to_ascii (A.String.get st.line.buf i) with
         [ Some c ->
             match c with
-            [ 'a'..'z' | 'A'..'Z' | '0'..'9' | '.' | '_' | '-' | '/' | '#' |
-              '~' ->
+            [ 'a'..'z' | 'A'..'Z' | '0'..'9' | '.' | '_' | '-' | '/' | '#' | '~' ->
                 loop (String.make 1 c ^ s) (i - 1)
             | _ -> s ]
         | None -> s ]
+  in
+  let s = if String.length s>0 && s.[0]=='~' 
+          then
+             try Sys.getenv "HOME" ^ String.sub s 1 (String.length s - 1) with _ -> s
+          else s
   in
   let dirname = Filename.dirname s in
   let basename = Filename.basename s in
@@ -1854,4 +1861,5 @@ value (set_prompt, get_prompt, input_a_char) =
 ;
 
 value input_char ic = A.Char.to_string (input_a_char ic);
+
 
