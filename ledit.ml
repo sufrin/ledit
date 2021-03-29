@@ -550,7 +550,7 @@ value rec parse_string rev_cl =
 value rec parse_pat rev_cl =
   fparser
   [ [: `'/' :] -> rev_implode rev_cl
-  | [: `'\\'; `c; r = parse_string [c; '\\' :: rev_cl] :] -> r
+  | [: `'\\'; `c; r = parse_pat [c :: rev_cl] :] -> r
   | [: `c; r = parse_pat [c :: rev_cl] :] -> r ]
 ;
 
@@ -1861,5 +1861,6 @@ value (set_prompt, get_prompt, input_a_char) =
 ;
 
 value input_char ic = A.Char.to_string (input_a_char ic);
+
 
 
